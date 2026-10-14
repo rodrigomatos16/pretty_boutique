@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Allura, Cormorant_Garamond, Montserrat } from "next/font/google";
 import "./globals.css";
+import Visitas from "@/components/Visitas";
 
 const cormorant = Cormorant_Garamond({
   subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-cormorant",
@@ -27,7 +28,7 @@ export const viewport: Viewport = { themeColor: "#cf256c" };
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" className={`${cormorant.variable} ${montserrat.variable} ${allura.variable}`}>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">{children}<Visitas /></body>
     </html>
   );
 }

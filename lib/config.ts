@@ -14,6 +14,9 @@ export const AVISO_TOPO = "Peça pelo WhatsApp · Pague como preferir · Entrega
 // Instagram da loja, sem o @. Ex.: "prettyboutique" (deixe "" para esconder o link)
 export const INSTAGRAM_LOJA = "";
 
+// Onde ver as visitas da loja (Vercel Web Analytics)
+export const LINK_VISITAS = "https://vercel.com/rodrigomatos16s-projects/pretty-boutique/analytics";
+
 // Bairros, taxas de entrega e formas de pagamento ficam no painel, aba "Entrega".
 // ================================================================
 
@@ -30,6 +33,16 @@ export const brl = (v: number) =>
 export function telefoneLoja() {
   const n = WHATSAPP_LOJA.replace(/^55/, "");
   return n.length >= 10 ? `(${n.slice(0, 2)}) ${n.slice(2, -4)}-${n.slice(-4)}` : WHATSAPP_LOJA;
+}
+
+// Link para conversar com a cliente pelo telefone que ela digitou na sacola.
+// Sem DDD, usa o DDD da loja. Devolve null se não parecer um telefone.
+export function linkWhatsapp(telefone: string, texto: string) {
+  let n = telefone.replace(/\D/g, "").replace(/^0+/, "");
+  if (n.length === 8 || n.length === 9) n = WHATSAPP_LOJA.slice(2, 4) + n;
+  if (n.length === 10 || n.length === 11) n = "55" + n;
+  if (!/^55\d{10,11}$/.test(n)) return null;
+  return `https://wa.me/${n}?text=${encodeURIComponent(texto)}`;
 }
 
 // Compara textos sem acento nem maiúsculas ("São Jorge" = "sao jorge")

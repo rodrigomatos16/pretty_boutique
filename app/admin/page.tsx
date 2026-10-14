@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import { brl, lerPreco, NOME_LOJA, ordenarTamanhos, RETIRADA } from "@/lib/config";
+import { brl, lerPreco, LINK_VISITAS, linkWhatsapp, NOME_LOJA, ordenarTamanhos, RETIRADA } from "@/lib/config";
 import { caminhosDaFoto } from "@/lib/imagem";
 import type { Entrega, Pagamento, Pedido, Produto } from "@/lib/types";
 import ProdutoForm from "@/components/ProdutoForm";
 import Miniatura from "@/components/Miniatura";
+import { IconeWhatsapp } from "@/components/Icones";
 
 export default function Admin() {
   const [sessao, setSessao] = useState<Session | null>(null);
@@ -96,7 +97,7 @@ function ConferirAcesso({ email }: { email: string }) {
   );
 }
 
-type Aba = "produtos" | "pedidos" | "entrega";
+type Aba = "produtos" | "pedidos" | "vendas" | "entrega";
 
 // Bipe curto quando chega pedido novo (não precisa de arquivo de som)
 function tocarAviso() {
@@ -152,9 +153,9 @@ function Painel() {
             <button onClick={() => supabase.auth.signOut()} className="px-2 py-2.5 text-sm text-tinta/60">Sair</button>
           </div>
           <nav className="order-last flex w-full gap-1 sm:order-none sm:w-auto sm:flex-1">
-            {(["produtos", "pedidos", "entrega"] as const).map((a) => (
+            {(["produtos", "pedidos", "vendas", "entrega"] as const).map((a) => (
               <button key={a} onClick={() => trocarAba(a)}
-                className={`flex-1 rounded-full px-4 py-2.5 text-sm capitalize sm:flex-none ${aba === a ? "bg-rosa text-white" : "bg-blush/60 text-vinho hover:bg-blush sm:bg-transparent"}`}>
+                className={`flex-1 rounded-full px-1.5 py-2.5 text-[13px] capitalize sm:flex-none sm:px-4 sm:text-sm ${aba === a ? "bg-rosa text-white" : "bg-blush/60 text-vinho hover:bg-blush sm:bg-transparent"}`}>
                 {a}
                 {a === "pedidos" && novos > 0 && (
                   <span className="ml-1.5 rounded-full bg-vinho px-1.5 py-0.5 text-xs text-white">{novos}</span>
@@ -165,7 +166,7 @@ function Painel() {
         </div>
       </header>
       <div className="mx-auto max-w-5xl px-4 py-6">
-        {aba === "produtos" ? <Produtos /> : aba === "pedidos" ? <Pedidos versao={versao} /> : <Entregas />}
+        {aba === "produtos" ? <Produtos /> : aba === "pedidos" ? <Pedidos versao={versao} /> : aba === "vendas" ? <Vendas /> : <Entregas />}
       </div>
     </main>
   );
@@ -278,6 +279,23 @@ const STATUS: Record<Pedido["status"], string> = {
   entregue: "bg-emerald-100 text-emerald-900", cancelado: "bg-stone-200 text-stone-600",
 };
 
+// Mensagem pronta para a cliente, de acordo com a etapa do pedido
+function avisoCliente(p: Pedido) {
+  const nome = p.cliente.trim().split(/\s+/)[0];
+  switch (p.status) {
+    case "novo":
+      return { rotulo: "Avisar que recebemos", texto: `Oi, ${nome}! Aqui é da ${NOME_LOJA}. Recebemos seu pedido #${p.id} (${brl(p.total)}) e já estamos separando suas peças!` };
+    case "confirmado":
+      return p.bairro === RETIRADA
+        ? { rotulo: "Avisar que está pronto", texto: `Oi, ${nome}! Seu pedido #${p.id} da ${NOME_LOJA} está pronto para retirada.` }
+        : { rotulo: "Avisar saída para entrega", texto: `Oi, ${nome}! Seu pedido #${p.id} da ${NOME_LOJA} saiu para entrega.` };
+    case "entregue":
+      return { rotulo: "Agradecer a compra", texto: `Oi, ${nome}! Obrigada por comprar na ${NOME_LOJA}. Gostou das peças?` };
+    default:
+      return { rotulo: "Conversar", texto: `Oi, ${nome}! Aqui é da ${NOME_LOJA}, sobre o seu pedido #${p.id}.` };
+  }
+}
+
 function Pedidos({ versao }: { versao: number }) {
   const [lista, setLista] = useState<Pedido[]>([]);
   const [filtro, setFiltro] = useState<"abertos" | "todos">("abertos");
@@ -338,8 +356,9 @@ function Pedidos({ versao }: { versao: number }) {
               <p className="mt-1 text-sm text-tinta/60">
                 {p.pagamento}{p.troco && ` · troco para R$ ${p.troco}`} · entrega {brl(p.entrega)}{Number(p.acrescimo) > 0 && ` · taxa ${brl(p.acrescimo)}`}
               </p>
+              <BotaoWhatsapp pedido={p} />
               {p.status !== "cancelado" && p.status !== "entregue" && (
-                <div className="mt-3 flex flex-wrap gap-2 text-sm">
+                <div className="mt-2 flex flex-wrap gap-2 text-sm">
                   {p.status === "novo" && <button onClick={() => mudarStatus(p, "confirmado")} className="rounded-lg bg-amber-100 px-3 py-1.5 text-amber-900">Confirmar</button>}
                   <button onClick={() => mudarStatus(p, "entregue")} className="rounded-lg bg-emerald-100 px-3 py-1.5 text-emerald-900">Marcar entregue</button>
                   <button onClick={() => mudarStatus(p, "cancelado")} className="rounded-lg px-3 py-1.5 text-red-700 hover:bg-red-50">Cancelar e devolver estoque</button>
@@ -350,6 +369,162 @@ function Pedidos({ versao }: { versao: number }) {
         </ul>
       )}
     </section>
+  );
+}
+
+function BotaoWhatsapp({ pedido }: { pedido: Pedido }) {
+  const { rotulo, texto } = avisoCliente(pedido);
+  const link = pedido.telefone ? linkWhatsapp(pedido.telefone, texto) : null;
+  if (!link) return <p className="mt-3 text-xs text-tinta/50">Sem telefone no pedido: responda pela conversa do pedido no WhatsApp.</p>;
+  return (
+    <a href={link} target="_blank" rel="noopener noreferrer"
+      className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[#1f8f4e] px-3 py-2 text-sm font-medium text-white hover:bg-[#187540]">
+      <IconeWhatsapp className="h-4 w-4" />{rotulo}
+    </a>
+  );
+}
+
+/* ------------------------------- Vendas ------------------------------- */
+type Venda = Pick<Pedido, "total" | "itens" | "created_at">;
+
+const inicioDoMes = (ano: number, mes: number) => new Date(ano, mes, 1);
+
+function resumir(lista: Venda[]) {
+  const total = lista.reduce((s, v) => s + Number(v.total), 0);
+  const pecas = lista.reduce((s, v) => s + v.itens.reduce((a, i) => a + Number(i.qtd), 0), 0);
+  return { total, pedidos: lista.length, medio: lista.length ? total / lista.length : 0, pecas };
+}
+
+function Vendas() {
+  const hoje = new Date();
+  const [mes, setMes] = useState({ ano: hoje.getFullYear(), mes: hoje.getMonth() });
+  const [vendas, setVendas] = useState<Venda[] | null>(null);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState(false);
+
+  // Busca o mês escolhido e o anterior (para comparar). Pedidos cancelados não contam.
+  useEffect(() => {
+    let ativo = true;
+    setCarregando(true);
+    supabase.from("pedidos").select("total, itens, created_at").neq("status", "cancelado")
+      .gte("created_at", inicioDoMes(mes.ano, mes.mes - 1).toISOString())
+      .lt("created_at", inicioDoMes(mes.ano, mes.mes + 1).toISOString())
+      .limit(5000)
+      .then(({ data, error }) => {
+        if (!ativo) return;
+        setErro(Boolean(error));
+        if (!error) setVendas((data as Venda[]) || []);
+        setCarregando(false);
+      });
+    return () => { ativo = false; };
+  }, [mes]);
+
+  const inicio = inicioDoMes(mes.ano, mes.mes);
+  const doMes = (vendas || []).filter((v) => new Date(v.created_at) >= inicio);
+  const atual = resumir(doMes);
+  const anterior = resumir((vendas || []).filter((v) => new Date(v.created_at) < inicio));
+  const nomeMes = inicio.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  const titulo = nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1);
+  const ehAtual = mes.ano === hoje.getFullYear() && mes.mes === hoje.getMonth();
+  const mudar = (d: number) => setMes((m) => {
+    const x = new Date(m.ano, m.mes + d, 1);
+    return { ano: x.getFullYear(), mes: x.getMonth() };
+  });
+
+  // Peças que mais vendem no mês, somadas por produto
+  const porPeca: Record<string, { nome: string; qtd: number; valor: number }> = {};
+  for (const i of doMes.flatMap((v) => v.itens)) {
+    const r = (porPeca[i.produto_id] ||= { nome: i.nome, qtd: 0, valor: 0 });
+    r.qtd += Number(i.qtd);
+    r.valor += Number(i.qtd) * Number(i.preco);
+  }
+  const ranking = Object.values(porPeca).sort((a, b) => b.qtd - a.qtd || b.valor - a.valor).slice(0, 10);
+  const maior = ranking[0]?.qtd || 1;
+
+  return (
+    <section>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex-1">
+          <h1 className="font-serif text-3xl font-semibold">Vendas</h1>
+          <p className="text-sm text-tinta/60">Pedidos que não foram cancelados</p>
+        </div>
+        <div className="flex items-center gap-1 rounded-full bg-white p-1 text-sm">
+          <button onClick={() => mudar(-1)} aria-label="Mês anterior" className="h-9 w-9 rounded-full text-lg hover:bg-blush">‹</button>
+          <span className="min-w-36 text-center font-medium">{titulo}</span>
+          <button onClick={() => mudar(1)} disabled={ehAtual} aria-label="Próximo mês"
+            className="h-9 w-9 rounded-full text-lg hover:bg-blush disabled:opacity-30">›</button>
+        </div>
+      </div>
+
+      {erro && <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">Não foi possível carregar as vendas. Confira sua internet.</p>}
+
+      <div className={`transition-opacity ${carregando && vendas ? "opacity-60" : ""}`}>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl bg-white p-5 sm:col-span-3">
+            <p className="text-sm text-tinta/60">Vendido em {nomeMes}</p>
+            <p className="mt-1 text-4xl font-semibold sm:text-5xl">{brl(atual.total)}</p>
+            <Variacao atual={atual.total} anterior={anterior.total} />
+          </div>
+          <Numero rotulo="Pedidos" valor={String(atual.pedidos)} atual={atual.pedidos} anterior={anterior.pedidos} />
+          <Numero rotulo="Peças vendidas" valor={String(atual.pecas)} atual={atual.pecas} anterior={anterior.pecas} />
+          <Numero rotulo="Valor médio por pedido" valor={brl(atual.medio)} atual={atual.medio} anterior={anterior.medio} />
+        </div>
+
+        <div className="mt-4 rounded-2xl bg-white p-5">
+          <h2 className="font-medium">Peças que mais vendem</h2>
+          <p className="text-sm text-tinta/60">Em {nomeMes}, pela quantidade vendida</p>
+          {ranking.length === 0 ? (
+            <p className="py-8 text-center text-sm text-tinta/60">{carregando && !vendas ? "Carregando…" : "Nenhuma venda neste mês."}</p>
+          ) : (
+            <ol className="mt-4 space-y-4">
+              {ranking.map((r, k) => (
+                <li key={`${r.nome}-${k}`}>
+                  <div className="flex flex-col text-sm sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
+                    <span className="min-w-0 truncate"><span className="mr-1.5 tabular-nums text-tinta/50">{k + 1}.</span>{r.nome}</span>
+                    <span className="shrink-0 tabular-nums">
+                      <strong className="font-semibold">{r.qtd} {r.qtd === 1 ? "peça" : "peças"}</strong>
+                      <span className="text-tinta/60"> · {brl(r.valor)}</span>
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-2 rounded-r bg-rosa" style={{ width: `${Math.max(2, (r.qtd / maior) * 100)}%` }} />
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </div>
+
+      <a href={LINK_VISITAS} target="_blank" rel="noopener noreferrer"
+        className="mt-4 flex items-center justify-between gap-4 rounded-2xl bg-white p-5 hover:bg-white/70">
+        <span>
+          <span className="block font-medium">Visitas da loja</span>
+          <span className="text-sm text-tinta/60">Quantas pessoas abriram a loja, quais páginas viram e de onde vieram (Instagram, Google…)</span>
+        </span>
+        <span className="shrink-0 text-sm text-vinho underline">Abrir</span>
+      </a>
+    </section>
+  );
+}
+
+function Numero({ rotulo, valor, atual, anterior }: { rotulo: string; valor: string; atual: number; anterior: number }) {
+  return (
+    <div className="rounded-2xl bg-white p-4">
+      <p className="text-sm text-tinta/60">{rotulo}</p>
+      <p className="mt-1 text-2xl font-semibold">{valor}</p>
+      <Variacao atual={atual} anterior={anterior} />
+    </div>
+  );
+}
+
+// Comparação com o mês anterior: seta e texto, não só a cor
+function Variacao({ atual, anterior }: { atual: number; anterior: number }) {
+  if (!anterior) return <p className="mt-1 text-xs text-tinta/50">{atual ? "Sem vendas no mês anterior" : "—"}</p>;
+  const pct = Math.round(((atual - anterior) / anterior) * 100);
+  if (pct === 0) return <p className="mt-1 text-xs text-tinta/60">Igual ao mês anterior</p>;
+  return (
+    <p className={`mt-1 text-xs font-medium ${pct > 0 ? "text-emerald-700" : "text-red-700"}`}>
+      {pct > 0 ? "▲ +" : "▼ "}{pct}% em relação ao mês anterior
+    </p>
   );
 }
 
