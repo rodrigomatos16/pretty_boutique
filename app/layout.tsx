@@ -1,11 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Cormorant_Garamond, Montserrat } from "next/font/google";
+import { Allura, Cormorant_Garamond, Montserrat } from "next/font/google";
 import "./globals.css";
 
 const cormorant = Cormorant_Garamond({
   subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-cormorant",
 });
 const montserrat = Montserrat({ subsets: ["latin"], variable: "--font-montserrat" });
+// Letra manuscrita do "pretty", parecida com a do logo
+const allura = Allura({ subsets: ["latin"], weight: "400", variable: "--font-allura" });
 
 export const metadata: Metadata = {
   title: "Pretty Boutique — Moda feminina",
@@ -24,7 +26,7 @@ export const viewport: Viewport = { themeColor: "#cf256c" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className={`${cormorant.variable} ${montserrat.variable}`}>
+    <html lang="pt-BR" className={`${cormorant.variable} ${montserrat.variable} ${allura.variable}`}>
       <body className="antialiased">{children}</body>
     </html>
   );

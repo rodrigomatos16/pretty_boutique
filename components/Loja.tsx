@@ -1,33 +1,22 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { supabase, supabaseConfigurado } from "@/lib/supabase";
-import { brl, MAX_POR_PECA, NOME_LOJA, ordenarTamanhos, RETIRADA, WHATSAPP_LOJA } from "@/lib/config";
+import { supabaseConfigurado } from "@/lib/supabase";
+import {
+  AVISO_TOPO, brl, INSTAGRAM_LOJA, NOME_LOJA, normalizar, ordenarTamanhos, RETIRADA, telefoneLoja, WHATSAPP_LOJA,
+} from "@/lib/config";
 import { carregarVitrine, type Vitrine } from "@/lib/vitrine";
-import type { Entrega, Pagamento, Produto } from "@/lib/types";
+import { CHAVE_SACOLA, estoqueTotal, limite, montarSacola, type ItemSalvo } from "@/lib/sacola";
+import type { Produto } from "@/lib/types";
 import Miniatura from "@/components/Miniatura";
+import DetalheProduto from "@/components/DetalheProduto";
+import Sacola from "@/components/Sacola";
+import {
+  IconeBusca, IconeCartao, IconeConversa, IconeEntrega, IconeInstagram, IconeSacola, IconeWhatsapp,
+} from "@/components/Icones";
 
-type ItemSalvo = { produto_id: string; tamanho: string; qtd: number };
-type ItemSacola = { chave: string; produto: Produto; tamanho: string; qtd: number };
-
-const CHAVE_SACOLA = "pretty-boutique:sacola";
-const chaveDe = (produtoId: string, tamanho: string) => `${produtoId}-${tamanho}`;
-const estoqueTotal = (p: Produto) => Object.values(p.estoque || {}).reduce((s, n) => s + Number(n), 0);
-const limite = (p: Produto, tamanho: string) => Math.min(MAX_POR_PECA, Number(p.estoque[tamanho] || 0));
-
-// Monta a sacola com os dados atuais das peças: a quantidade nunca passa do
-// estoque, e o que esgotou ou saiu da loja some. "ajustada" avisa a cliente.
-function montarSacola(itens: ItemSalvo[], produtos: Produto[]) {
-  const sacola: ItemSacola[] = [];
-  let ajustada = false;
-  for (const i of itens) {
-    const produto = produtos.find((p) => p.id === i.produto_id);
-    const qtd = produto ? Math.min(i.qtd, limite(produto, i.tamanho)) : 0;
-    if (qtd !== i.qtd) ajustada = true;
-    if (produto && qtd > 0) sacola.push({ chave: chaveDe(produto.id, i.tamanho), produto, tamanho: i.tamanho, qtd });
-  }
-  return { sacola, ajustada };
-}
+type Ordem = "recentes" | "menor" | "maior";
 
 // Se a atualização falhar, mantém o que já estava na tela
 const mesclar = (atual: Vitrine, nova: Vitrine): Vitrine => !nova.erro ? nova : {
@@ -40,12 +29,15 @@ const mesclar = (atual: Vitrine, nova: Vitrine): Vitrine => !nova.erro ? nova : 
 export default function Loja({ inicial, pecaInicial }: { inicial: Vitrine; pecaInicial?: string }) {
   const [vitrine, setVitrine] = useState(inicial);
   const [categoria, setCategoria] = useState("Todas");
+  const [busca, setBusca] = useState("");
+  const [ordem, setOrdem] = useState<Ordem>("recentes");
   const [aberto, setAberto] = useState<Produto | null>(() => inicial.produtos.find((p) => p.id === pecaInicial) || null);
   const [aviso, setAviso] = useState(() =>
     pecaInicial && !inicial.produtos.some((p) => p.id === pecaInicial) ? "Essa peça não está mais disponível. Veja as outras novidades!" : "");
   const [itens, setItens] = useState<ItemSalvo[]>([]);
   const [verSacola, setVerSacola] = useState(false);
-  const { produtos } = vitrine;
+  const [toast, setToast] = useState("");
+  const { produtos, entregas, pagamentos } = vitrine;
 
   const carregar = useCallback(async () => {
     const nova = await carregarVitrine();
@@ -64,6 +56,12 @@ export default function Loja({ inicial, pecaInicial }: { inicial: Vitrine; pecaI
       }
     } catch {}
   }, [carregar]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const { sacola, ajustada } = useMemo(() => montarSacola(itens, produtos), [itens, produtos]);
 
@@ -97,370 +95,315 @@ export default function Loja({ inicial, pecaInicial }: { inicial: Vitrine; pecaI
     window.history.replaceState(null, "", p ? `/peca/${p.id}` : "/");
   }
 
+  function abrirSacola() {
+    setToast("");
+    setVerSacola(true);
+  }
+
+  function escolherCategoria(c: string) {
+    setCategoria(c);
+    document.getElementById("pecas")?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  function irParaBusca() {
+    document.getElementById("pecas")?.scrollIntoView({ behavior: "smooth" });
+    setTimeout(() => document.getElementById("busca")?.focus({ preventScroll: true }), 400);
+  }
+
   const categorias = useMemo(
     () => ["Todas", ...Array.from(new Set(produtos.map((p) => p.categoria).filter(Boolean)))],
     [produtos]
   );
-  const visiveis = categoria === "Todas" ? produtos : produtos.filter((p) => p.categoria === categoria);
+
+  const visiveis = useMemo(() => {
+    const termo = normalizar(busca);
+    const lista = produtos.filter((p) =>
+      (categoria === "Todas" || p.categoria === categoria) && (!termo || normalizar(p.nome).includes(termo)));
+    if (ordem === "menor") lista.sort((a, b) => a.preco - b.preco);
+    if (ordem === "maior") lista.sort((a, b) => b.preco - a.preco);
+    // Peças esgotadas vão para o fim da vitrine
+    return lista.sort((a, b) => Number(estoqueTotal(a) === 0) - Number(estoqueTotal(b) === 0));
+  }, [produtos, categoria, busca, ordem]);
+
   const qtdSacola = sacola.reduce((s, i) => s + i.qtd, 0);
   const subtotal = sacola.reduce((s, i) => s + i.qtd * i.produto.preco, 0);
   const pecaAberta = aberto && (produtos.find((p) => p.id === aberto.id) || aberto);
+  const fotosDestaque = produtos.filter((p) => p.fotos[0] && estoqueTotal(p) > 0).slice(0, 2).map((p) => p.fotos[0]);
+  const titulo = busca.trim() ? `Busca: “${busca.trim()}”` : categoria === "Todas" ? "Novidades" : categoria;
+  const temRetirada = entregas.some((e) => e.bairro === RETIRADA);
+
+  const vantagens = [
+    { icone: <IconeConversa />, titulo: "Pedido pelo WhatsApp", texto: "Atendimento direto com a loja" },
+    { icone: <IconeCartao />, titulo: "Pague como preferir", texto: pagamentos.length ? pagamentos.map((f) => f.nome).join(", ") : "Combine com a loja" },
+    { icone: <IconeEntrega />, titulo: "Entrega no seu bairro", texto: temRetirada ? "Ou retire na loja" : "Taxa calculada na sacola" },
+  ];
 
   return (
-    <main className="min-h-screen pb-28">
-      <header className="bg-blush">
-        <div className="mx-auto flex max-w-6xl flex-col items-center px-4 pt-6 pb-8 text-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.jpeg" alt={NOME_LOJA} className="h-44 w-44 rounded-full bg-white object-contain shadow-[0_0_0_6px_white] sm:h-52 sm:w-52" />
-          <p className="mt-5 max-w-md font-serif text-2xl leading-snug text-vinho sm:text-3xl">
-            Escolha suas peças favoritas e receba em casa.
-          </p>
-          <p className="mt-2 text-sm text-vinho/80">Pedido finalizado direto no nosso WhatsApp.</p>
-        </div>
-      </header>
+    <div className="flex min-h-screen flex-col">
+      {AVISO_TOPO && (
+        <p className="bg-vinho px-4 py-2 text-center text-[10px] font-medium uppercase tracking-[0.2em] text-white sm:text-[11px]">
+          {AVISO_TOPO}
+        </p>
+      )}
 
-      {categorias.length > 2 && (
-        <nav className="sticky top-0 z-10 border-b border-blush-forte bg-white/95 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl gap-2 overflow-x-auto px-4 py-3">
+      <header className="sticky top-0 z-30 border-b border-linha bg-white/95 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
+          <Link href="/" aria-label={`${NOME_LOJA}, página inicial`} className="flex items-baseline gap-2">
+            <span className="font-script text-[2.6rem] leading-none text-rosa">pretty</span>
+            <span className="font-serif text-[11px] font-semibold tracking-[0.35em] text-vinho">BOUTIQUE</span>
+          </Link>
+          <div className="flex items-center gap-1">
+            <button onClick={irParaBusca} aria-label="Buscar peças"
+              className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-blush">
+              <IconeBusca />
+            </button>
+            <button onClick={abrirSacola} aria-label={`Abrir sacola (${qtdSacola} ${qtdSacola === 1 ? "peça" : "peças"})`}
+              className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-blush">
+              <IconeSacola className="h-6 w-6" />
+              {qtdSacola > 0 && (
+                <span className="absolute right-0.5 top-0.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-rosa px-1 text-[10px] font-semibold text-white">
+                  {qtdSacola}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+        {categorias.length > 2 && (
+          <nav aria-label="Categorias" className="sem-barra mx-auto flex max-w-6xl gap-7 overflow-x-auto px-4">
             {categorias.map((c) => (
-              <button key={c} onClick={() => setCategoria(c)}
-                className={`shrink-0 rounded-full px-4 py-1.5 text-sm transition-colors ${
-                  categoria === c ? "bg-rosa text-white" : "bg-blush text-vinho hover:bg-blush-forte"}`}>
-                {c}
+              <button key={c} onClick={() => escolherCategoria(c)} aria-current={categoria === c ? "true" : undefined}
+                className={`shrink-0 border-b-2 pb-3 pt-1 text-[11px] font-semibold uppercase tracking-[0.2em] transition-colors ${
+                  categoria === c ? "border-rosa text-tinta" : "border-transparent text-tinta/55 hover:text-tinta"}`}>
+                {c === "Todas" ? "Tudo" : c}
               </button>
             ))}
-          </div>
-        </nav>
-      )}
+          </nav>
+        )}
+      </header>
 
-      <section className="mx-auto max-w-6xl px-4 pt-6">
-        {!supabaseConfigurado && (
-          <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">
-            Configure o Supabase no arquivo <code>.env.local</code> para a vitrine aparecer (veja o README).
-          </p>
-        )}
-        {aviso && <p role="status" className="mb-6 rounded-xl bg-blush p-4 text-sm text-vinho">{aviso}</p>}
-        {vitrine.erro && (
-          <div role="alert" className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">
-            <span>Não conseguimos carregar a vitrine agora. Confira sua internet.</span>
-            <button onClick={carregar} className="rounded-full bg-white px-4 py-1.5 font-medium">Tentar de novo</button>
-          </div>
-        )}
-        {visiveis.length === 0 ? (
-          !vitrine.erro && supabaseConfigurado && <p className="py-16 text-center text-vinho/70">Nenhuma peça por aqui ainda. Volte em breve!</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-x-4 gap-y-8 md:grid-cols-3 lg:grid-cols-4">
-            {visiveis.map((p) => {
-              const esgotado = estoqueTotal(p) === 0;
-              return (
-                <button key={p.id} onClick={() => abrir(p)} className="group text-left">
-                  <div className="relative aspect-[3/4] overflow-hidden rounded-2xl bg-blush">
-                    {p.fotos[0] ? (
-                      <Miniatura src={p.fotos[0]} alt={p.nome} lazy
-                        className={`h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] ${esgotado ? "opacity-50 grayscale" : ""}`} />
-                    ) : (
-                      <div className="flex h-full items-center justify-center font-serif text-vinho/50">sem foto</div>
-                    )}
-                    {esgotado && (
-                      <span className="absolute left-3 top-3 rounded-full bg-white px-3 py-1 text-xs font-medium text-vinho">Esgotado</span>
-                    )}
+      <main className="flex-1">
+        <section className="bg-blush">
+          <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-9 md:grid-cols-2 md:py-16">
+            <div className="text-center md:text-left">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-rosa">Moda feminina</p>
+              <h1 className="mt-3 font-serif text-[2.2rem] leading-[1.05] sm:text-5xl lg:text-6xl">
+                Escolha suas favoritas e receba em casa
+              </h1>
+              <p className="mx-auto mt-4 max-w-md text-sm text-tinta/70 sm:text-base md:mx-0">
+                Monte sua sacola e finalize o pedido direto no nosso WhatsApp, sem precisar de cadastro.
+              </p>
+              <a href="#pecas"
+                className="mt-6 inline-block rounded-md bg-tinta px-8 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-white transition-colors hover:bg-vinho">
+                Ver as peças
+              </a>
+            </div>
+            {fotosDestaque.length === 2 ? (
+              <div className="hidden grid-cols-2 gap-4 md:grid">
+                {fotosDestaque.map((f, i) => (
+                  <div key={f} className={`aspect-[3/4] overflow-hidden rounded-md bg-white shadow-sm ${i === 1 ? "mt-14" : "mb-14"}`}>
+                    <Miniatura src={f} className="h-full w-full object-cover" />
                   </div>
-                  <h2 className="mt-3 font-serif text-xl font-semibold leading-tight">{p.nome}</h2>
-                  <p className="mt-0.5 font-medium text-rosa">{brl(p.preco)}</p>
-                </button>
-              );
-            })}
+                ))}
+              </div>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src="/logo.jpeg" alt="" className="mx-auto hidden h-72 w-72 rounded-full bg-white object-contain shadow-[0_0_0_10px_white] md:block" />
+            )}
           </div>
-        )}
-      </section>
+        </section>
 
-      {pecaAberta && (
-        <DetalheProduto key={pecaAberta.id} produto={pecaAberta} noCarrinho={sacola}
-          onFechar={() => abrir(null)}
-          onAdicionar={(t) => { adicionar(pecaAberta, t); abrir(null); }} />
+        <section className="border-b border-linha">
+          <ul className="mx-auto grid max-w-6xl grid-cols-3 gap-3 px-4 py-5 sm:gap-6">
+            {vantagens.map((v) => (
+              <li key={v.titulo} className="flex flex-col items-center gap-2 text-center sm:flex-row sm:gap-3 sm:text-left">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blush text-vinho">{v.icone}</span>
+                <span>
+                  <span className="block text-[11px] font-semibold leading-tight sm:text-sm">{v.titulo}</span>
+                  <span className="hidden text-xs text-tinta/60 sm:block">{v.texto}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section id="pecas" className="mx-auto max-w-6xl scroll-mt-32 px-4 pb-20 pt-10">
+          {!supabaseConfigurado && (
+            <p className="mb-8 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Configure o Supabase no arquivo <code>.env.local</code> para a vitrine aparecer (veja o README).
+            </p>
+          )}
+          {aviso && <p role="status" className="mb-8 rounded-md bg-blush px-4 py-3 text-sm text-vinho">{aviso}</p>}
+          {vitrine.erro && (
+            <div role="alert" className="mb-8 flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <span>Não conseguimos carregar a vitrine agora. Confira sua internet.</span>
+              <button onClick={carregar} className="rounded-md bg-white px-4 py-1.5 font-medium shadow-sm">Tentar de novo</button>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="font-serif text-3xl sm:text-4xl">{titulo}</h2>
+              <p className="mt-1 text-sm text-tinta/60">{visiveis.length} {visiveis.length === 1 ? "peça" : "peças"}</p>
+            </div>
+            <div className="flex w-full gap-2 sm:w-auto">
+              <label className="relative flex-1 sm:w-64 sm:flex-none">
+                <span className="sr-only">Buscar peça</span>
+                <IconeBusca className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tinta/50" />
+                <input id="busca" type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar peça"
+                  className="w-full rounded-md border border-linha py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-tinta" />
+              </label>
+              <label>
+                <span className="sr-only">Ordenar peças</span>
+                <select value={ordem} onChange={(e) => setOrdem(e.target.value as Ordem)}
+                  className="h-full rounded-md border border-linha bg-white px-3 text-sm outline-none transition-colors focus:border-tinta">
+                  <option value="recentes">Mais recentes</option>
+                  <option value="menor">Menor preço</option>
+                  <option value="maior">Maior preço</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          {visiveis.length === 0 ? (
+            busca.trim() ? (
+              <div className="py-20 text-center">
+                <p className="text-tinta/70">Nenhuma peça encontrada para “{busca.trim()}”.</p>
+                <button onClick={() => setBusca("")} className="mt-3 text-sm font-semibold underline underline-offset-4">Limpar busca</button>
+              </div>
+            ) : (
+              !vitrine.erro && supabaseConfigurado && <p className="py-20 text-center text-tinta/60">Nenhuma peça por aqui ainda. Volte em breve!</p>
+            )
+          ) : (
+            <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-10 md:grid-cols-3 lg:grid-cols-4">
+              {visiveis.map((p) => <CartaoProduto key={p.id} produto={p} onAbrir={() => abrir(p)} />)}
+            </div>
+          )}
+        </section>
+      </main>
+
+      <footer className="bg-tinta text-white/75">
+        <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <p className="flex items-baseline gap-2">
+              <span className="font-script text-4xl leading-none text-white">pretty</span>
+              <span className="font-serif text-[11px] font-semibold tracking-[0.35em] text-white/80">BOUTIQUE</span>
+            </p>
+            <p className="mt-4 max-w-xs text-sm leading-relaxed">Moda feminina com pedido direto pelo WhatsApp.</p>
+          </div>
+          <div>
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white">Atendimento</h3>
+            <ul className="mt-4 space-y-2.5 text-sm">
+              <li>
+                <a href={`https://wa.me/${WHATSAPP_LOJA}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:text-white">
+                  <IconeWhatsapp className="h-4 w-4" />{telefoneLoja()}
+                </a>
+              </li>
+              {INSTAGRAM_LOJA && (
+                <li>
+                  <a href={`https://instagram.com/${INSTAGRAM_LOJA}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:text-white">
+                    <IconeInstagram className="h-4 w-4" />@{INSTAGRAM_LOJA}
+                  </a>
+                </li>
+              )}
+            </ul>
+          </div>
+          {pagamentos.length > 0 && (
+            <div>
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white">Pagamento</h3>
+              <ul className="mt-4 space-y-2.5 text-sm">{pagamentos.map((f) => <li key={f.id}>{f.nome}</li>)}</ul>
+            </div>
+          )}
+          {entregas.length > 0 && (
+            <div>
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white">Entrega</h3>
+              <ul className="mt-4 space-y-2.5 text-sm">
+                {entregas.slice(0, 6).map((e) => <li key={e.id}>{e.bairro}</li>)}
+                {entregas.length > 6 && <li>e outros bairros</li>}
+              </ul>
+            </div>
+          )}
+        </div>
+        <p className="border-t border-white/10 px-4 py-6 text-center text-xs text-white/50">
+          © <span suppressHydrationWarning>{new Date().getFullYear()}</span> {NOME_LOJA} · Pedidos finalizados pelo WhatsApp
+        </p>
+      </footer>
+
+      {!pecaAberta && !verSacola && (
+        <a href={`https://wa.me/${WHATSAPP_LOJA}`} target="_blank" rel="noopener noreferrer" aria-label="Falar com a loja no WhatsApp"
+          className={`fixed right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-[#25d366] text-white shadow-lg transition-transform hover:scale-105 md:bottom-6 ${
+            qtdSacola > 0 ? "bottom-24" : "bottom-6"}`}>
+          <IconeWhatsapp className="h-7 w-7" />
+        </a>
       )}
 
-      {qtdSacola > 0 && !verSacola && (
-        <div className="fixed inset-x-0 bottom-0 z-20 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          <button onClick={() => setVerSacola(true)}
-            className="mx-auto flex w-full max-w-md items-center justify-between rounded-full bg-rosa px-6 py-4 font-semibold text-white shadow-lg shadow-rosa/30 hover:bg-rosa-escuro">
-            <span>Ver sacola ({qtdSacola})</span><span>{brl(subtotal)}</span>
+      {qtdSacola > 0 && !verSacola && !pecaAberta && (
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-linha bg-white/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden">
+          <button onClick={abrirSacola}
+            className="flex w-full items-center justify-between rounded-md bg-tinta px-5 py-3.5 text-sm font-semibold text-white">
+            <span className="flex items-center gap-2"><IconeSacola className="h-5 w-5" />Ver sacola ({qtdSacola})</span>
+            <span>{brl(subtotal)}</span>
           </button>
         </div>
       )}
 
+      {toast && !verSacola && (
+        <div role="status" className="fixed inset-x-4 top-20 z-50 mx-auto flex max-w-md items-center justify-between gap-4 rounded-md bg-tinta px-4 py-3 text-sm text-white shadow-xl">
+          <span>{toast}</span>
+          <button onClick={abrirSacola} className="shrink-0 font-semibold underline underline-offset-4">
+            Ver sacola
+          </button>
+        </div>
+      )}
+
+      {pecaAberta && (
+        <DetalheProduto key={pecaAberta.id} produto={pecaAberta} noCarrinho={sacola} entregas={entregas} pagamentos={pagamentos}
+          onFechar={() => abrir(null)}
+          onAdicionar={(t) => {
+            adicionar(pecaAberta, t);
+            abrir(null);
+            setToast(`${pecaAberta.nome} (tam. ${t}) está na sua sacola.`);
+          }} />
+      )}
+
       {verSacola && (
-        <Checkout sacola={sacola} ajustada={ajustada} entregas={vitrine.entregas} pagamentos={vitrine.pagamentos}
+        <Sacola sacola={sacola} ajustada={ajustada} entregas={entregas} pagamentos={pagamentos}
           alterarQtd={alterarQtd} onRecarregar={carregar}
           onFechar={() => setVerSacola(false)}
           onConcluido={() => { mudarSacola([]); setVerSacola(false); carregar(); }} />
       )}
-    </main>
-  );
-}
-
-/* ------------------------- Detalhe da peça ------------------------- */
-function DetalheProduto({ produto, noCarrinho, onFechar, onAdicionar }: {
-  produto: Produto; noCarrinho: ItemSacola[]; onFechar: () => void; onAdicionar: (t: string) => void;
-}) {
-  const [foto, setFoto] = useState(0);
-  const [copiado, setCopiado] = useState(false);
-  const tamanhos = ordenarTamanhos(Object.keys(produto.estoque || {}));
-  const naSacola = (t: string) => noCarrinho.find((i) => i.chave === chaveDe(produto.id, t))?.qtd || 0;
-  const disponivel = (t: string) => limite(produto, t) - naSacola(t);
-  const [tam, setTam] = useState(tamanhos.find((t) => disponivel(t) > 0) || "");
-  const restam = Number(produto.estoque[tam] || 0) - naSacola(tam);
-
-  // No celular abre a lista de apps (WhatsApp, Instagram...); no computador copia o link
-  async function compartilhar() {
-    const url = `${window.location.origin}/peca/${produto.id}`;
-    if (navigator.share) {
-      try { await navigator.share({ title: produto.nome, text: `${produto.nome} — ${brl(produto.preco)}`, url }); } catch {}
-      return;
-    }
-    try { await navigator.clipboard.writeText(url); setCopiado(true); } catch { window.prompt("Copie o link da peça:", url); }
-  }
-
-  return (
-    <Painel onFechar={onFechar} titulo={produto.nome}>
-      <div className="aspect-[3/4] overflow-hidden rounded-2xl bg-blush">
-        {produto.fotos[foto] && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={produto.fotos[foto]} alt={produto.nome} className="h-full w-full object-cover" />
-        )}
-      </div>
-      {produto.fotos.length > 1 && (
-        <div className="mt-3 flex gap-2 overflow-x-auto">
-          {produto.fotos.map((f, i) => (
-            <button key={f} onClick={() => setFoto(i)} aria-label={`Foto ${i + 1}`}
-              className={`h-16 w-12 shrink-0 overflow-hidden rounded-lg border-2 ${i === foto ? "border-rosa" : "border-transparent"}`}>
-              <Miniatura src={f} className="h-full w-full object-cover" />
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <p className="text-2xl font-semibold text-rosa">{brl(produto.preco)}</p>
-        <button onClick={compartilhar} className="rounded-full bg-blush px-4 py-2 text-sm text-vinho">
-          {copiado ? "Link copiado!" : "Compartilhar"}
-        </button>
-      </div>
-      {produto.descricao && <p className="mt-2 whitespace-pre-line leading-relaxed text-tinta/80">{produto.descricao}</p>}
-
-      <p className="mt-5 text-sm font-medium">Tamanho</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {tamanhos.map((t) => {
-          const d = disponivel(t);
-          return (
-            <button key={t} disabled={d <= 0} onClick={() => setTam(t)} aria-pressed={tam === t}
-              className={`min-w-12 rounded-xl border px-3 py-2 text-sm transition-colors disabled:cursor-not-allowed disabled:border-dashed disabled:text-tinta/30 ${
-                tam === t ? "border-rosa bg-rosa text-white" : "border-blush-forte hover:border-rosa"}`}>
-              {t}
-            </button>
-          );
-        })}
-      </div>
-      {tam && restam > 0 && restam <= 2 && (
-        <p className="mt-2 text-sm text-vinho">Só {restam === 1 ? "resta 1 peça" : `restam ${restam} peças`} nesse tamanho.</p>
-      )}
-
-      <button disabled={!tam || disponivel(tam) <= 0} onClick={() => onAdicionar(tam)}
-        className="mt-6 w-full rounded-full bg-rosa py-4 font-semibold text-white hover:bg-rosa-escuro disabled:bg-tinta/20">
-        {tamanhos.every((t) => disponivel(t) <= 0) ? (tamanhos.some((t) => naSacola(t) > 0) ? "Já está na sua sacola" : "Esgotado") : "Adicionar à sacola"}
-      </button>
-    </Painel>
-  );
-}
-
-/* ----------------------------- Checkout ----------------------------- */
-// Compara nomes de bairro sem acento nem maiúsculas ("São Jorge" = "sao jorge")
-const normalizar = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
-
-// Mensagens de erro do banco que a cliente pode ver como estão
-const ERRO_CONHECIDO = /^(Sem estoque|Produto indisponível|Bairro de entrega|Forma de pagamento|Quantidade|Pedido|Informe|Dados)/;
-
-function Checkout({ sacola, ajustada, entregas, pagamentos, alterarQtd, onRecarregar, onFechar, onConcluido }: {
-  sacola: ItemSacola[]; ajustada: boolean; entregas: Entrega[]; pagamentos: Pagamento[];
-  alterarQtd: (c: string, d: number) => void; onRecarregar: () => void; onFechar: () => void; onConcluido: () => void;
-}) {
-  const [nome, setNome] = useState("");
-  const [telefone, setTelefone] = useState("");
-  const [bairro, setBairro] = useState("");
-  const [cep, setCep] = useState("");
-  const [rua, setRua] = useState("");
-  const [numero, setNumero] = useState("");
-  const [complemento, setComplemento] = useState("");
-  const [pagamento, setPagamento] = useState("");
-  const [troco, setTroco] = useState("");
-  const [erro, setErro] = useState("");
-  const [enviando, setEnviando] = useState(false);
-
-  const retirada = bairro === RETIRADA;
-  const forma = pagamentos.find((f) => f.id === pagamento) || pagamentos[0];
-  const subtotal = sacola.reduce((s, i) => s + i.qtd * i.produto.preco, 0);
-  const entrega = entregas.find((e) => e.bairro === bairro)?.taxa ?? 0;
-  const acrescimo = forma ? Math.round((subtotal + Number(entrega)) * Number(forma.acrescimo) * 100) / 100 : 0;
-  const total = subtotal + Number(entrega) + acrescimo;
-
-  // O CEP preenche a rua e, se o bairro estiver na lista de entrega, escolhe o bairro também
-  async function buscarCep(v: string) {
-    const limpo = v.replace(/\D/g, "").slice(0, 8);
-    setCep(limpo);
-    if (limpo.length !== 8) return;
-    try {
-      const d = await (await fetch(`https://viacep.com.br/ws/${limpo}/json/`)).json();
-      if (d.erro) return;
-      if (d.logradouro) setRua(d.logradouro);
-      const achado = d.bairro && entregas.find((e) => e.bairro !== RETIRADA && normalizar(e.bairro) === normalizar(d.bairro));
-      if (achado) setBairro(achado.bairro);
-    } catch {}
-  }
-
-  async function finalizar() {
-    if (!sacola.length) return setErro("Sua sacola está vazia.");
-    if (!nome.trim()) return setErro("Informe seu nome.");
-    if (!bairro) return setErro("Escolha o bairro de entrega.");
-    if (!retirada && (!rua.trim() || !numero.trim())) return setErro("Informe rua e número.");
-    if (!forma) return setErro("Escolha a forma de pagamento.");
-    setErro(""); setEnviando(true);
-
-    const endereco = retirada ? "Retirada na loja"
-      : `${rua.trim()}, ${numero.trim()}${complemento.trim() ? ` - ${complemento.trim()}` : ""}${cep ? `, CEP ${cep}` : ""}`;
-    const dinheiro = forma.id === "dinheiro";
-
-    // Taxa de entrega, acréscimo e preços são calculados pelo banco
-    const { data, error } = await supabase.rpc("criar_pedido", {
-      p_cliente: nome.trim(), p_telefone: telefone.trim(), p_endereco: endereco, p_bairro: bairro,
-      p_itens: sacola.map((i) => ({ produto_id: i.produto.id, tamanho: i.tamanho, qtd: i.qtd })),
-      p_pagamento: forma.id, p_troco: dinheiro ? troco.trim() : "",
-    });
-    setEnviando(false);
-    if (error) {
-      // Estoque, bairro ou pagamento mudaram: atualiza a vitrine e a sacola
-      if (/^(Sem estoque|Produto indisponível|Bairro de entrega|Forma de pagamento)/.test(error.message)) onRecarregar();
-      return setErro(ERRO_CONHECIDO.test(error.message) ? error.message : "Não foi possível registrar o pedido. Tente de novo.");
-    }
-
-    const linhas = [
-      `*Pedido #${data.id} — ${NOME_LOJA}*`, "",
-      `*Cliente:* ${nome.trim()}${telefone.trim() ? ` (${telefone.trim()})` : ""}`, "",
-      "*Itens:*",
-      ...data.itens.map((i: { qtd: number; nome: string; tamanho: string; preco: number }) =>
-        `• ${i.qtd}x ${i.nome} (tam. ${i.tamanho}) — ${brl(i.preco * i.qtd)}`),
-      "",
-      retirada ? "*Entrega:* retirar na loja" : `*Endereço:* ${endereco}, ${bairro}`, "",
-      `Subtotal: ${brl(data.subtotal)}`,
-      `Taxa de entrega: ${brl(data.entrega)}`,
-      ...(Number(data.acrescimo) > 0 ? [`Taxa do cartão: ${brl(data.acrescimo)}`] : []),
-      `*Total: ${brl(data.total)}*`, "",
-      `*Pagamento:* ${data.pagamento}${dinheiro && troco.trim() ? ` (troco para R$ ${troco.trim()})` : ""}`,
-    ];
-    onConcluido();
-    window.location.href = `https://wa.me/${WHATSAPP_LOJA}?text=${encodeURIComponent(linhas.join("\n"))}`;
-  }
-
-  const campo = "w-full rounded-xl border border-blush-forte bg-white px-4 py-3 outline-none focus:border-rosa";
-
-  return (
-    <Painel onFechar={onFechar} titulo="Sua sacola">
-      {ajustada && (
-        <p role="status" className="mb-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Algumas peças esgotaram ou mudaram de estoque, e sua sacola foi ajustada.
-        </p>
-      )}
-      {sacola.length === 0 ? <p className="text-tinta/70">Sua sacola está vazia.</p> : (
-        <ul className="divide-y divide-blush-forte">
-          {sacola.map((i) => (
-            <li key={i.chave} className="flex items-center gap-3 py-3">
-              {i.produto.fotos[0] && <Miniatura src={i.produto.fotos[0]} className="h-16 w-12 rounded-lg object-cover" />}
-              <div className="flex-1">
-                <p className="font-medium leading-tight">{i.produto.nome}</p>
-                <p className="text-sm text-tinta/60">Tam. {i.tamanho} · {brl(i.produto.preco)}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button aria-label="Diminuir" onClick={() => alterarQtd(i.chave, -1)} className="h-8 w-8 rounded-full bg-blush">−</button>
-                <span className="w-5 text-center">{i.qtd}</span>
-                <button aria-label="Aumentar" onClick={() => alterarQtd(i.chave, 1)}
-                  disabled={i.qtd >= limite(i.produto, i.tamanho)}
-                  className="h-8 w-8 rounded-full bg-blush disabled:opacity-40">+</button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <h3 className="mt-6 font-serif text-2xl font-semibold">Entrega</h3>
-      <div className="mt-3 space-y-3">
-        <input className={campo} placeholder="Seu nome" maxLength={100} value={nome} onChange={(e) => setNome(e.target.value)} />
-        <input className={campo} placeholder="Telefone (opcional)" inputMode="tel" maxLength={30} value={telefone} onChange={(e) => setTelefone(e.target.value)} />
-        <select className={campo} value={bairro} onChange={(e) => setBairro(e.target.value)}>
-          <option value="">Escolha o bairro</option>
-          {entregas.map((e) => <option key={e.id} value={e.bairro}>{e.bairro} — {Number(e.taxa) === 0 ? "grátis" : brl(e.taxa)}</option>)}
-        </select>
-        {!retirada && (
-          <>
-            <input className={campo} placeholder="CEP (preenche a rua)" inputMode="numeric" value={cep} onChange={(e) => buscarCep(e.target.value)} />
-            <input className={campo} placeholder="Rua" maxLength={150} value={rua} onChange={(e) => setRua(e.target.value)} />
-            <div className="grid grid-cols-[96px_1fr] gap-3">
-              <input className={campo} placeholder="Nº" maxLength={10} value={numero} onChange={(e) => setNumero(e.target.value)} />
-              <input className={campo} placeholder="Complemento" maxLength={80} value={complemento} onChange={(e) => setComplemento(e.target.value)} />
-            </div>
-          </>
-        )}
-      </div>
-
-      <h3 className="mt-6 font-serif text-2xl font-semibold">Pagamento</h3>
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        {pagamentos.map((f) => (
-          <button key={f.id} onClick={() => setPagamento(f.id)} aria-pressed={forma?.id === f.id}
-            className={`rounded-xl border px-3 py-3 text-left text-sm ${forma?.id === f.id ? "border-rosa bg-blush font-medium" : "border-blush-forte"}`}>
-            {f.nome}{Number(f.acrescimo) > 0 && <span className="block text-xs text-tinta/60">+{Math.round(Number(f.acrescimo) * 1000) / 10}% de taxa</span>}
-          </button>
-        ))}
-      </div>
-      {forma?.id === "dinheiro" && (
-        <input className={`${campo} mt-3`} placeholder="Troco para quanto? (opcional)" inputMode="decimal" maxLength={30} value={troco} onChange={(e) => setTroco(e.target.value)} />
-      )}
-
-      <dl className="mt-6 space-y-1.5 rounded-2xl bg-blush p-4 text-sm">
-        <div className="flex justify-between"><dt>Subtotal</dt><dd>{brl(subtotal)}</dd></div>
-        <div className="flex justify-between"><dt>Taxa de entrega</dt><dd>{bairro ? brl(entrega) : "—"}</dd></div>
-        {acrescimo > 0 && <div className="flex justify-between"><dt>Taxa do cartão</dt><dd>{brl(acrescimo)}</dd></div>}
-        <div className="flex justify-between border-t border-blush-forte pt-2 text-lg font-semibold text-vinho"><dt>Total</dt><dd>{brl(total)}</dd></div>
-      </dl>
-
-      {erro && <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</p>}
-
-      <button onClick={finalizar} disabled={enviando}
-        className="mt-5 w-full rounded-full bg-[#1f8f4e] py-4 font-semibold text-white hover:bg-[#187540] disabled:opacity-60">
-        {enviando ? "Registrando pedido…" : "Enviar pedido pelo WhatsApp"}
-      </button>
-      <p className="mt-3 text-center text-xs text-tinta/60">
-        Seus dados são usados só para a loja combinar a entrega deste pedido.
-      </p>
-    </Painel>
-  );
-}
-
-/* --------------------------- Painel lateral --------------------------- */
-function Painel({ titulo, onFechar, children }: { titulo: string; onFechar: () => void; children: React.ReactNode }) {
-  useEffect(() => {
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && onFechar();
-    document.addEventListener("keydown", esc);
-    document.body.style.overflow = "hidden";
-    return () => { document.removeEventListener("keydown", esc); document.body.style.overflow = ""; };
-  }, [onFechar]);
-
-  return (
-    <div className="fixed inset-0 z-30 flex justify-end bg-tinta/40" onClick={onFechar}>
-      <div role="dialog" aria-modal="true" aria-label={titulo} onClick={(e) => e.stopPropagation()}
-        className="h-full w-full max-w-md overflow-y-auto bg-white p-5 pb-10">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-serif text-3xl font-semibold">{titulo}</h2>
-          <button onClick={onFechar} aria-label="Fechar" className="h-10 w-10 rounded-full bg-blush text-xl text-vinho">×</button>
-        </div>
-        {children}
-      </div>
     </div>
+  );
+}
+
+/* --------------------------- Card da vitrine --------------------------- */
+function CartaoProduto({ produto: p, onAbrir }: { produto: Produto; onAbrir: () => void }) {
+  const total = estoqueTotal(p);
+  const tamanhos = ordenarTamanhos(Object.keys(p.estoque || {}).filter((t) => Number(p.estoque[t]) > 0));
+  return (
+    <button onClick={onAbrir} className="group text-left">
+      <div className="relative aspect-[3/4] overflow-hidden rounded-md bg-creme">
+        {p.fotos[0] ? (
+          <>
+            <Miniatura src={p.fotos[0]} alt={p.nome} lazy
+              className={`absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105 ${total === 0 ? "opacity-60 grayscale" : ""}`} />
+            {/* No computador, a segunda foto aparece ao passar o mouse */}
+            {p.fotos[1] && total > 0 && (
+              <Miniatura src={p.fotos[1]} lazy
+                className="absolute inset-0 h-full w-full object-cover opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+            )}
+          </>
+        ) : (
+          <div className="flex h-full items-center justify-center font-serif text-lg text-tinta/40">sem foto</div>
+        )}
+        {total === 0 ? (
+          <span className="absolute left-2 top-2 rounded-sm bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wider">Esgotado</span>
+        ) : total <= 2 && (
+          <span className="absolute left-2 top-2 rounded-sm bg-rosa px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-white">Últimas peças</span>
+        )}
+      </div>
+      <h3 className="mt-3 line-clamp-2 text-sm leading-snug text-tinta/90">{p.nome}</h3>
+      <p className="mt-1 font-semibold">{brl(p.preco)}</p>
+      {tamanhos.length > 0 && <p className="mt-1 text-[11px] uppercase tracking-wider text-tinta/45">{tamanhos.join(" · ")}</p>}
+    </button>
   );
 }

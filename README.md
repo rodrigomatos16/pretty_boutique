@@ -43,7 +43,8 @@ npm run dev
 
 - **No painel, aba Entrega:** bairros, taxas de entrega, formas de pagamento e acréscimos.
   Antes de divulgar a loja, troque o bairro de exemplo ("Centro") pelos bairros que você atende.
-- **Em `lib/config.ts`:** número do WhatsApp, tamanhos e categorias.
+- **Em `lib/config.ts`:** número do WhatsApp, Instagram (aparece no rodapé), a frase da faixa
+  no topo da loja, tamanhos e categorias.
 - As cores da marca estão em `app/globals.css`. O logo é `public/logo.jpeg`
   (ele também aparece na prévia quando alguém compartilha o link da loja).
 

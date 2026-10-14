@@ -8,6 +8,12 @@ export const TAMANHOS_PADRAO = ["PP", "P", "M", "G", "GG", "Único"];
 
 export const CATEGORIAS = ["Vestidos", "Blusas", "Calças", "Saias", "Conjuntos", "Acessórios"];
 
+// Faixa fina no topo da loja (deixe "" para esconder)
+export const AVISO_TOPO = "Peça pelo WhatsApp · Pague como preferir · Entrega no seu bairro";
+
+// Instagram da loja, sem o @. Ex.: "prettyboutique" (deixe "" para esconder o link)
+export const INSTAGRAM_LOJA = "";
+
 // Bairros, taxas de entrega e formas de pagamento ficam no painel, aba "Entrega".
 // ================================================================
 
@@ -19,6 +25,15 @@ export const MAX_POR_PECA = 10;
 
 export const brl = (v: number) =>
   Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+// "5592996038916" vira "(92) 99603-8916"
+export function telefoneLoja() {
+  const n = WHATSAPP_LOJA.replace(/^55/, "");
+  return n.length >= 10 ? `(${n.slice(0, 2)}) ${n.slice(2, -4)}-${n.slice(-4)}` : WHATSAPP_LOJA;
+}
+
+// Compara textos sem acento nem maiúsculas ("São Jorge" = "sao jorge")
+export const normalizar = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
 // Lê "89,90", "89.90", "1.234,56" e "R$ 89,90". Separador seguido de
 // 3 dígitos é de milhar: "1.234" vale mil duzentos e trinta e quatro.

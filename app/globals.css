@@ -8,11 +8,22 @@
   --color-tinta: #3a1e23;       /* texto principal */
   --color-blush: #fcf0f4;       /* fundo suave */
   --color-blush-forte: #f6d6e2;
+  --color-creme: #faf6f4;       /* fundo das fotos */
+  --color-linha: #efe4e8;       /* bordas finas */
   --font-serif: var(--font-cormorant), Georgia, serif;
   --font-sans: var(--font-montserrat), system-ui, sans-serif;
+  --font-script: var(--font-allura), cursive;
+}
+
+/* Esconde a barra de rolagem das listas que deslizam para o lado */
+@utility sem-barra {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
 }
 
 :root { color-scheme: light; }
+
+html { scroll-behavior: smooth; }
 
 body {
   background: #fff;
@@ -20,8 +31,11 @@ body {
   font-family: var(--font-sans);
 }
 
+summary::-webkit-details-marker { display: none; }
+
 :focus-visible { outline: 2px solid var(--color-rosa); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
   * { transition: none !important; animation: none !important; }
 }
