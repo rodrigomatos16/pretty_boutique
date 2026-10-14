@@ -144,13 +144,17 @@ function Painel() {
   return (
     <main className="min-h-screen bg-blush/50">
       <header className="border-b border-blush-forte bg-white">
-        <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-3">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.jpeg" alt="" className="h-12 w-12" />
-          <nav className="flex flex-1 gap-1 overflow-x-auto">
+          <div className="ml-auto flex items-center gap-2 sm:order-last">
+            <a href="/" target="_blank" className="px-1 py-2.5 text-sm text-vinho underline">Ver loja</a>
+            <button onClick={() => supabase.auth.signOut()} className="px-2 py-2.5 text-sm text-tinta/60">Sair</button>
+          </div>
+          <nav className="order-last flex w-full gap-1 sm:order-none sm:w-auto sm:flex-1">
             {(["produtos", "pedidos", "entrega"] as const).map((a) => (
               <button key={a} onClick={() => trocarAba(a)}
-                className={`shrink-0 rounded-full px-4 py-2 text-sm capitalize ${aba === a ? "bg-rosa text-white" : "text-vinho hover:bg-blush"}`}>
+                className={`flex-1 rounded-full px-4 py-2.5 text-sm capitalize sm:flex-none ${aba === a ? "bg-rosa text-white" : "bg-blush/60 text-vinho hover:bg-blush sm:bg-transparent"}`}>
                 {a}
                 {a === "pedidos" && novos > 0 && (
                   <span className="ml-1.5 rounded-full bg-vinho px-1.5 py-0.5 text-xs text-white">{novos}</span>
@@ -158,8 +162,6 @@ function Painel() {
               </button>
             ))}
           </nav>
-          <a href="/" target="_blank" className="hidden text-sm text-vinho underline sm:block">Ver loja</a>
-          <button onClick={() => supabase.auth.signOut()} className="text-sm text-tinta/60">Sair</button>
         </div>
       </header>
       <div className="mx-auto max-w-5xl px-4 py-6">
@@ -236,7 +238,7 @@ function Produtos() {
             const est = ordenarTamanhos(Object.keys(p.estoque)).map((t) => [t, p.estoque[t]] as const);
             const total = est.reduce((s, [, n]) => s + Number(n), 0);
             return (
-              <li key={p.id} className={`flex items-center gap-3 rounded-2xl bg-white p-3 ${p.ativo ? "" : "opacity-60"}`}>
+              <li key={p.id} className={`flex flex-wrap items-center gap-3 rounded-2xl bg-white p-3 ${p.ativo ? "" : "opacity-60"}`}>
                 <div className="h-20 w-15 shrink-0 overflow-hidden rounded-xl bg-blush">
                   {p.fotos[0] && <Miniatura src={p.fotos[0]} className="h-full w-full object-cover" lazy />}
                 </div>
@@ -252,7 +254,7 @@ function Produtos() {
                     {total === 0 && <span className="font-medium text-red-700">Esgotado</span>}
                   </p>
                 </div>
-                <div className="flex flex-col gap-1 text-sm sm:flex-row">
+                <div className="flex w-full flex-wrap gap-1 border-t border-blush-forte pt-2 text-sm sm:w-auto sm:border-0 sm:pt-0">
                   <button onClick={() => setEditando(p)} className="rounded-lg bg-blush px-3 py-1.5 text-vinho">Editar</button>
                   {p.ativo && (
                     <button onClick={() => copiarLink(p)} className="rounded-lg px-3 py-1.5 text-tinta/70 hover:bg-blush">
@@ -435,8 +437,8 @@ function Entregas() {
         <h2 className="font-medium">Bairros de entrega</h2>
         <div className="mt-3 space-y-2">
           {bairros.map((b, i) => (
-            <div key={b.id ?? `novo-${i}`} className="grid grid-cols-[1fr_88px_auto_auto] items-center gap-2">
-              <input className={campo} value={b.bairro} maxLength={60} placeholder="Nome do bairro" aria-label="Nome do bairro"
+            <div key={b.id ?? `novo-${i}`} className="grid grid-cols-[1fr_auto_auto] items-center gap-2 border-b border-blush-forte pb-2 last:border-0 sm:grid-cols-[1fr_96px_auto_auto] sm:border-0 sm:pb-0">
+              <input className={`${campo} col-span-3 sm:col-span-1`} value={b.bairro} maxLength={60} placeholder="Nome do bairro" aria-label="Nome do bairro"
                 onChange={(e) => mudarBairro(i, { bairro: e.target.value })} />
               <input className={campo} value={b.taxa} inputMode="decimal" placeholder="Taxa" aria-label={`Taxa de entrega de ${b.bairro || "novo bairro"}`}
                 onChange={(e) => mudarBairro(i, { taxa: e.target.value })} />
@@ -458,8 +460,8 @@ function Entregas() {
         <p className="text-sm text-tinta/60">Acréscimo em %: por exemplo, 5 para a taxa do cartão de crédito.</p>
         <div className="mt-3 space-y-2">
           {pagamentos.map((p, i) => (
-            <div key={p.id} className="grid grid-cols-[1fr_88px_auto] items-center gap-2">
-              <input className={campo} value={p.nome} maxLength={40} aria-label="Nome da forma de pagamento"
+            <div key={p.id} className="grid grid-cols-[1fr_auto] items-center gap-2 border-b border-blush-forte pb-2 last:border-0 sm:grid-cols-[1fr_96px_auto] sm:border-0 sm:pb-0">
+              <input className={`${campo} col-span-2 sm:col-span-1`} value={p.nome} maxLength={40} aria-label="Nome da forma de pagamento"
                 onChange={(e) => mudarPagamento(i, { nome: e.target.value })} />
               <input className={campo} value={p.acrescimo} inputMode="decimal" aria-label={`Acréscimo de ${p.nome} em %`}
                 onChange={(e) => mudarPagamento(i, { acrescimo: e.target.value })} />

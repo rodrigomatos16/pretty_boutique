@@ -65,20 +65,21 @@ export default function DetalheProduto({ produto, noCarrinho, entregas, pagament
             <div className="flex aspect-[3/4] items-center justify-center bg-creme font-serif text-xl text-tinta/40">sem foto</div>
           )}
           {produto.fotos.length > 1 && (
-            <div className="absolute inset-x-0 bottom-3 flex justify-center gap-1.5 md:hidden">
+            <div className="absolute inset-x-0 bottom-0 flex justify-center md:hidden">
               {produto.fotos.map((f, i) => (
-                <button key={f} onClick={() => irParaFoto(i)} aria-label={`Ver foto ${i + 1}`}
-                  className={`h-1.5 rounded-full transition-all ${i === foto ? "w-5 bg-tinta" : "w-1.5 bg-tinta/30"}`} />
+                <button key={f} onClick={() => irParaFoto(i)} aria-label={`Ver foto ${i + 1}`} className="px-1 py-3.5">
+                  <span className={`block h-1.5 rounded-full transition-all ${i === foto ? "w-5 bg-tinta" : "w-1.5 bg-tinta/30"}`} />
+                </button>
               ))}
             </div>
           )}
         </div>
 
-        <div className="flex flex-1 flex-col px-5 pt-6 md:overflow-y-auto md:px-9 md:pt-10">
+        <div className="flex flex-1 flex-col px-5 pt-6 md:overflow-y-auto md:px-9 md:pt-10 tela-baixa:pt-6">
           {produto.categoria && (
             <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-rosa">{produto.categoria}</p>
           )}
-          <h2 className="mt-2 pr-10 font-serif text-3xl leading-tight md:text-4xl">{produto.nome}</h2>
+          <h2 className="mt-2 pr-10 font-serif text-3xl leading-tight md:text-4xl tela-baixa:text-2xl">{produto.nome}</h2>
           <div className="mt-3 flex items-center justify-between gap-3">
             <p className="text-2xl font-semibold">{brl(produto.preco)}</p>
             <button onClick={compartilhar}

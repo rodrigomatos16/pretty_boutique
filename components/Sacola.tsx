@@ -98,7 +98,8 @@ export default function Sacola({ sacola, ajustada, entregas, pagamentos, alterar
   }
 
   const rotulo = "mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-tinta/70";
-  const campo = "w-full rounded-md border border-linha bg-white px-3.5 py-3 text-sm outline-none transition-colors focus:border-tinta";
+  // text-base: com letra menor que 16px o iPhone e o iPad dão zoom ao tocar no campo
+  const campo = "w-full rounded-md border border-linha bg-white px-3.5 py-3 text-base outline-none transition-colors focus:border-tinta";
   const secao = "text-[11px] font-semibold uppercase tracking-[0.2em] text-rosa";
 
   return (
@@ -152,12 +153,12 @@ export default function Sacola({ sacola, ajustada, entregas, pagamentos, alterar
                       <p className="mt-1 text-xs text-tinta/60">Tamanho {i.tamanho} · {brl(i.produto.preco)} cada</p>
                       <div className="mt-auto flex items-center justify-between pt-3">
                         <div className="flex items-center rounded-md border border-linha">
-                          <button aria-label="Diminuir" onClick={() => alterarQtd(i.chave, -1)} className="h-9 w-9 text-lg leading-none">−</button>
+                          <button aria-label="Diminuir" onClick={() => alterarQtd(i.chave, -1)} className="h-10 w-10 text-lg leading-none">−</button>
                           <span className="w-6 text-center text-sm">{i.qtd}</span>
                           <button aria-label="Aumentar" onClick={() => alterarQtd(i.chave, 1)} disabled={i.qtd >= limite(i.produto, i.tamanho)}
-                            className="h-9 w-9 text-lg leading-none disabled:opacity-30">+</button>
+                            className="h-10 w-10 text-lg leading-none disabled:opacity-30">+</button>
                         </div>
-                        <button onClick={() => alterarQtd(i.chave, -i.qtd)} className="text-xs text-tinta/60 underline underline-offset-4 hover:text-tinta">
+                        <button onClick={() => alterarQtd(i.chave, -i.qtd)} className="-mr-2 px-2 py-3 text-xs text-tinta/60 underline underline-offset-4 hover:text-tinta">
                           Remover
                         </button>
                       </div>

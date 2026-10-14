@@ -104,13 +104,13 @@ export default function ProdutoForm({ produto, onSalvo, onCancelar }: {
     <div className="space-y-5">
       <div>
         <label className="text-sm font-medium">Fotos <span className="font-normal text-tinta/60">(a primeira é a capa)</span></label>
-        <div className="mt-2 grid grid-cols-3 gap-3 sm:grid-cols-4">
+        <div className="mt-2 grid grid-cols-2 gap-3 min-[380px]:grid-cols-3 sm:grid-cols-4">
           {dados.fotos.map((f, i) => (
             <div key={f} className="relative aspect-[3/4] overflow-hidden rounded-xl bg-blush">
               <Miniatura src={f} className="h-full w-full object-cover" />
               <div className="absolute inset-x-1 bottom-1 flex gap-1">
-                {i > 0 && <button onClick={() => virarCapa(f)} className="flex-1 rounded-md bg-white/90 py-1 text-xs">Capa</button>}
-                <button onClick={() => removerFoto(f)} className="flex-1 rounded-md bg-white/90 py-1 text-xs text-red-700">Remover</button>
+                {i > 0 && <button onClick={() => virarCapa(f)} className="flex-1 rounded-md bg-white/90 py-2 text-xs">Capa</button>}
+                <button onClick={() => removerFoto(f)} className="flex-1 rounded-md bg-white/90 py-2 text-xs text-red-700">Remover</button>
               </div>
               {i === 0 && <span className="absolute left-1 top-1 rounded-md bg-rosa px-2 py-0.5 text-xs text-white">Capa</span>}
             </div>
@@ -124,7 +124,7 @@ export default function ProdutoForm({ produto, onSalvo, onCancelar }: {
       </div>
 
       <input className={campo} placeholder="Nome da peça, ex.: Vestido midi floral" value={dados.nome} onChange={(e) => set("nome", e.target.value)} />
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3 min-[380px]:grid-cols-2">
         <input className={campo} placeholder="Preço, ex.: 89,90" inputMode="decimal" value={preco} onChange={(e) => setPreco(e.target.value)} />
         <select className={campo} value={dados.categoria} onChange={(e) => set("categoria", e.target.value)}>
           <option value="">Categoria</option>
@@ -159,7 +159,7 @@ export default function ProdutoForm({ produto, onSalvo, onCancelar }: {
 
       {erro && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</p>}
 
-      <div className="flex gap-3">
+      <div className="sticky bottom-0 -mx-5 flex gap-3 border-t border-blush-forte bg-white px-5 py-3 sm:static sm:mx-0 sm:border-0 sm:p-0">
         <button onClick={cancelar} disabled={enviandoFoto} className="flex-1 rounded-full border border-blush-forte py-3 disabled:opacity-60">Cancelar</button>
         <button onClick={salvar} disabled={salvando || enviandoFoto}
           className="flex-1 rounded-full bg-rosa py-3 font-semibold text-white hover:bg-rosa-escuro disabled:opacity-60">

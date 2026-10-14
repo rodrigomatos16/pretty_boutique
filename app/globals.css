@@ -15,6 +15,9 @@
   --font-script: var(--font-allura), cursive;
 }
 
+/* Telas baixas, como celular deitado: títulos menores para caber o essencial */
+@custom-variant tela-baixa (@media (max-height: 500px));
+
 /* Esconde a barra de rolagem das listas que deslizam para o lado */
 @utility sem-barra {
   scrollbar-width: none;
