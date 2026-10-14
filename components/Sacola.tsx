@@ -7,7 +7,7 @@ import { limite, type ItemSacola } from "@/lib/sacola";
 import type { Entrega, Pagamento } from "@/lib/types";
 import { useModal } from "@/lib/useModal";
 import Miniatura from "@/components/Miniatura";
-import { IconeFechar, IconeSacola, IconeVoltar, IconeWhatsapp } from "@/components/Icones";
+import { IconeFechar, IconeLocal, IconeSacola, IconeVoltar, IconeWhatsapp } from "@/components/Icones";
 
 // Mensagens de erro do banco que a cliente pode ver como estão
 const ERRO_CONHECIDO = /^(Sem estoque|Produto indisponível|Bairro de entrega|Forma de pagamento|Quantidade|Pedido|Informe|Dados)/;
@@ -25,6 +25,7 @@ export default function Sacola({ sacola, ajustada, entregas, pagamentos, alterar
   const [telefone, setTelefone] = useState("");
   const [bairro, setBairro] = useState("");
   const [cep, setCep] = useState("");
+  const [avisoCep, setAvisoCep] = useState("");
   const [rua, setRua] = useState("");
   const [numero, setNumero] = useState("");
   const [complemento, setComplemento] = useState("");
@@ -41,17 +42,21 @@ export default function Sacola({ sacola, ajustada, entregas, pagamentos, alterar
   const acrescimo = forma ? Math.round((subtotal + Number(entrega)) * Number(forma.acrescimo) * 100) / 100 : 0;
   const total = subtotal + Number(entrega) + acrescimo;
 
-  // O CEP preenche a rua e, se o bairro estiver na lista de entrega, escolhe o bairro também
+  // O CEP preenche a rua e escolhe o bairro, se ele estiver na lista de entrega.
+  // Se não estiver, a cliente fica sabendo e escolhe o mais próximo.
   async function buscarCep(v: string) {
     const limpo = v.replace(/\D/g, "").slice(0, 8);
     setCep(limpo);
+    setAvisoCep("");
     if (limpo.length !== 8) return;
     try {
       const d = await (await fetch(`https://viacep.com.br/ws/${limpo}/json/`)).json();
-      if (d.erro) return;
+      if (d.erro) return setAvisoCep("CEP não encontrado. Confira os números ou preencha o endereço abaixo.");
       if (d.logradouro) setRua(d.logradouro);
-      const achado = d.bairro && entregas.find((e) => e.bairro !== RETIRADA && normalizar(e.bairro) === normalizar(d.bairro));
-      if (achado) setBairro(achado.bairro);
+      if (!d.bairro) return;
+      const achado = entregas.find((e) => e.bairro !== RETIRADA && normalizar(e.bairro) === normalizar(d.bairro));
+      setBairro(achado ? achado.bairro : "");
+      if (!achado) setAvisoCep(`Pelo CEP, seu bairro é ${d.bairro}, que não está na nossa lista de entrega. Escolha o bairro mais próximo ou fale com a loja.`);
     } catch {}
   }
 
@@ -86,7 +91,9 @@ export default function Sacola({ sacola, ajustada, entregas, pagamentos, alterar
       ...data.itens.map((i: { qtd: number; nome: string; tamanho: string; preco: number }) =>
         `• ${i.qtd}x ${i.nome} (tam. ${i.tamanho}) — ${brl(i.preco * i.qtd)}`),
       "",
-      retirada ? "*Entrega:* retirar na loja" : `*Endereço:* ${endereco}, ${bairro}`, "",
+      ...(retirada ? ["*Entrega:* retirar na loja"]
+        : [`*Endereço:* ${endereco}, ${bairro}`, "📍 Vou mandar minha localização fixa logo depois desta mensagem."]),
+      "",
       `Subtotal: ${brl(data.subtotal)}`,
       `Taxa de entrega: ${brl(data.entrega)}`,
       ...(Number(data.acrescimo) > 0 ? [`Taxa do cartão: ${brl(data.acrescimo)}`] : []),
@@ -181,6 +188,12 @@ export default function Sacola({ sacola, ajustada, entregas, pagamentos, alterar
 
               <section className="space-y-3">
                 <h3 className={secao}>Entrega</h3>
+                {!retirada && (
+                  <label className="block"><span className={rotulo}>CEP (preenche a rua e o bairro)</span>
+                    <input className={campo} inputMode="numeric" autoComplete="postal-code" value={cep} onChange={(e) => buscarCep(e.target.value)} />
+                    {avisoCep && <span role="status" className="mt-1.5 block text-xs text-amber-800">{avisoCep}</span>}
+                  </label>
+                )}
                 <label className="block"><span className={rotulo}>Bairro</span>
                   <select className={campo} value={bairro} onChange={(e) => setBairro(e.target.value)}>
                     <option value="">Escolha o bairro</option>
@@ -189,9 +202,6 @@ export default function Sacola({ sacola, ajustada, entregas, pagamentos, alterar
                 </label>
                 {!retirada && (
                   <>
-                    <label className="block"><span className={rotulo}>CEP (preenche a rua)</span>
-                      <input className={campo} inputMode="numeric" autoComplete="postal-code" value={cep} onChange={(e) => buscarCep(e.target.value)} />
-                    </label>
                     <label className="block"><span className={rotulo}>Rua</span>
                       <input className={campo} autoComplete="address-line1" maxLength={150} value={rua} onChange={(e) => setRua(e.target.value)} />
                     </label>
@@ -202,6 +212,14 @@ export default function Sacola({ sacola, ajustada, entregas, pagamentos, alterar
                       <label className="block"><span className={rotulo}>Complemento</span>
                         <input className={campo} autoComplete="address-line2" maxLength={80} value={complemento} onChange={(e) => setComplemento(e.target.value)} />
                       </label>
+                    </div>
+                    <div className="flex gap-3 rounded-md bg-blush px-4 py-3 text-sm leading-relaxed text-vinho">
+                      <IconeLocal className="mt-0.5 h-5 w-5 shrink-0" />
+                      <p>
+                        <strong>Importante:</strong> depois de enviar o pedido, mande sua <strong>localização fixa</strong> no
+                        WhatsApp da loja. Toque no clipe 📎 (no iPhone, no +), escolha <em>Localização</em> e depois
+                        <em> Enviar localização atual</em>.
+                      </p>
                     </div>
                   </>
                 )}

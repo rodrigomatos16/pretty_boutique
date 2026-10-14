@@ -429,7 +429,8 @@ function Entregas() {
         <h1 className="font-serif text-3xl font-semibold">Entrega e pagamento</h1>
         <p className="text-sm text-tinta/60">
           Confira os bairros e as taxas antes de divulgar a loja. A cliente escolhe o bairro na sacola e a taxa entra no total.
-          “{RETIRADA}” não pede endereço.
+          “{RETIRADA}” não pede endereço. Para o CEP escolher o bairro sozinho, escreva o nome igual ao dos Correios
+          (ex.: “Parque 10 de Novembro”).
         </p>
       </div>
 

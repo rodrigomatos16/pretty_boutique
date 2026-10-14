@@ -32,6 +32,9 @@ export const IconeCartao = (p: Props) => (
 export const IconeEntrega = (p: Props) => (
   <Icone {...p}><path d="M3.5 7.5 12 3.5l8.5 4-8.5 4-8.5-4Z" /><path d="M3.5 7.5v9l8.5 4 8.5-4v-9M12 11.5v9" /></Icone>
 );
+export const IconeLocal = (p: Props) => (
+  <Icone {...p}><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z" /><circle cx="12" cy="10" r="2.5" /></Icone>
+);
 export const IconeInstagram = (p: Props) => (
   <Icone {...p}><rect x="3.5" y="3.5" width="17" height="17" rx="5" /><circle cx="12" cy="12" r="3.8" /><circle cx="17.2" cy="6.8" r=".6" fill="currentColor" /></Icone>
 );
