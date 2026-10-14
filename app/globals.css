@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+/* Cores tiradas do logo da Pretty Boutique */
+@theme {
+  --color-rosa: #cf256c;        /* magenta do "pretty" */
+  --color-rosa-escuro: #a81a55;
+  --color-vinho: #6d343b;       /* vinho do vestidinho */
+  --color-tinta: #3a1e23;       /* texto principal */
+  --color-blush: #fcf0f4;       /* fundo suave */
+  --color-blush-forte: #f6d6e2;
+  --font-serif: var(--font-cormorant), Georgia, serif;
+  --font-sans: var(--font-montserrat), system-ui, sans-serif;
+}
+
+:root { color-scheme: light; }
+
+body {
+  background: #fff;
+  color: var(--color-tinta);
+  font-family: var(--font-sans);
+}
+
+:focus-visible { outline: 2px solid var(--color-rosa); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
